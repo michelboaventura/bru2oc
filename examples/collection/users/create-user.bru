@@ -1,0 +1,36 @@
+meta {
+  name: create-user
+  type: http
+  seq: 2
+}
+
+post {
+  url: https://api.example.com/users
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "role": "admin"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isNumber
+}
+
+script:post-response {
+  const body = res.getBody();
+  bru.setVar("user_id", body.id);
+}

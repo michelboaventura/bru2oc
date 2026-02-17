@@ -1,0 +1,39 @@
+meta {
+  name: login
+  type: http
+  seq: 1
+}
+
+post {
+  url: https://api.example.com/auth/login
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "username": "{{username}}",
+    "password": "{{password}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.token: isString
+}
+
+vars:post-response {
+  access_token: res.body.token
+}
+
+script:post-response {
+  const body = res.getBody();
+  bru.setVar("access_token", body.token);
+}
+
+docs {
+  Login endpoint that returns a JWT access token.
+  Store the token for use in subsequent authenticated requests.
+}
