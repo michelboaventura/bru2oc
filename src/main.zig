@@ -2,26 +2,19 @@ const std = @import("std");
 const bru2oc = @import("bru2oc");
 
 pub fn main() !void {
-    // Prints to stderr, ignoring potential errors.
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-    try bru2oc.bufferedPrint();
-}
+    var gpa_state: std.heap.DebugAllocator(.{}) = .init;
+    defer _ = gpa_state.deinit();
+    const allocator = gpa_state.allocator();
 
-test "simple test" {
-    const gpa = std.testing.allocator;
-    var list: std.ArrayList(i32) = .empty;
-    defer list.deinit(gpa); // Try commenting this out and see if zig detects the memory leak!
-    try list.append(gpa, 42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
-}
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
 
-test "fuzz example" {
-    const Context = struct {
-        fn testOne(context: @This(), input: []const u8) anyerror!void {
-            _ = context;
-            // Try passing `--fuzz` to `zig build test` and see if it manages to fail this test case!
-            try std.testing.expect(!std.mem.eql(u8, "canyoufindme", input));
-        }
+    // Skip program name (args[0])
+    const cli_args = if (args.len > 1) args[1..] else args[0..0];
+
+    const exit_code = bru2oc.converter.run(allocator, cli_args) catch {
+        std.process.exit(1);
     };
-    try std.testing.fuzz(Context{}, Context.testOne, .{});
+
+    std.process.exit(exit_code);
 }
