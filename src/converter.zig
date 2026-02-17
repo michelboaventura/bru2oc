@@ -4,6 +4,7 @@ const transformer = @import("transformer.zig");
 const yaml_emitter = @import("yaml_emitter.zig");
 const fs_utils = @import("fs_utils.zig");
 const cli_mod = @import("cli.zig");
+const reverse_converter = @import("reverse_converter.zig");
 
 pub const ConvertOptions = struct {
     keep_comments: bool = false,
@@ -283,6 +284,37 @@ pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
         stderr_writer.flush() catch {};
         return 1;
     };
+
+    if (validated.reverse) {
+        // Reverse mode: .yml -> .bru
+        const rev_opts = reverse_converter.ReverseConvertOptions{
+            .verbose = validated.verbose,
+            .dry_run = validated.dry_run,
+            .delete_original = validated.delete,
+            .output_dir = validated.output_dir,
+        };
+        const rev_result = reverse_converter.convertFile(allocator, validated.path.?, rev_opts);
+        if (rev_result.skipped) {
+            stdout_writer.print("[dry-run] {s} -> {s}\n", .{
+                rev_result.input_path,
+                rev_result.output_path orelse "?",
+            }) catch {};
+        } else if (rev_result.success) {
+            stdout_writer.print("[ok] {s} -> {s}\n", .{
+                rev_result.input_path,
+                rev_result.output_path orelse "?",
+            }) catch {};
+        } else {
+            stderr_writer.print("[error] {s}: {s}\n", .{
+                rev_result.input_path,
+                rev_result.error_msg orelse "unknown error",
+            }) catch {};
+        }
+        if (rev_result.output_path) |op| allocator.free(op);
+        stdout_writer.flush() catch {};
+        stderr_writer.flush() catch {};
+        return if (rev_result.success) @as(u8, 0) else 1;
+    }
 
     const options = ConvertOptions{
         .keep_comments = validated.keep_comments,

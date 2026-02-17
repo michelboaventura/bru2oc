@@ -4,6 +4,8 @@ const transformer = @import("transformer.zig");
 const yaml_emitter = @import("yaml_emitter.zig");
 const fs_utils = @import("fs_utils.zig");
 const converter = @import("converter.zig");
+const yaml_parser = @import("yaml_parser.zig");
+const bru_emitter = @import("bru_emitter.zig");
 
 // ── End-to-End Integration Tests ────────────────────────────────────────
 
@@ -403,4 +405,48 @@ test "emitter: assertions output" {
     try std.testing.expect(std.mem.indexOf(u8, yaml, "assertions:") != null);
     try std.testing.expect(std.mem.indexOf(u8, yaml, "operator: eq") != null);
     try std.testing.expect(std.mem.indexOf(u8, yaml, "operator: contains") != null);
+}
+
+// ── Round-trip Tests ───────────────────────────────────────────────────
+
+test "round-trip: bru -> yaml -> bru preserves key fields" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const source =
+        \\meta {
+        \\  name: roundtrip
+        \\  type: http
+        \\}
+        \\
+        \\get {
+        \\  url: https://api.example.com/data
+        \\}
+        \\
+        \\headers {
+        \\  Accept: application/json
+        \\}
+        \\
+        \\auth:bearer {
+        \\  token: my-token
+        \\}
+    ;
+
+    // Forward: bru -> yaml
+    const doc = try parser.parse(alloc, source);
+    const req = try transformer.transform(alloc, doc);
+    const yaml = try yaml_emitter.emit(alloc, req, .{});
+
+    // Reverse: yaml -> OpenCollectionRequest -> bru
+    const req2 = try yaml_parser.parse(alloc, yaml);
+    const bru = try bru_emitter.emit(alloc, req2);
+
+    // Verify key fields survived the round trip
+    try std.testing.expect(std.mem.indexOf(u8, bru, "name: roundtrip") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bru, "get {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bru, "https://api.example.com/data") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bru, "Accept: application/json") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bru, "auth:bearer") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bru, "token: my-token") != null);
 }

@@ -10,6 +10,7 @@ pub const CliArgs = struct {
     dry_run: bool = false,
     verbose: bool = false,
     keep_comments: bool = false,
+    reverse: bool = false,
     show_help: bool = false,
     show_version: bool = false,
 };
@@ -49,6 +50,8 @@ pub fn parseArgs(args: []const []const u8) CliError!CliArgs {
                 result.verbose = true;
             } else if (std.mem.eql(u8, arg, "--keep-comments")) {
                 result.keep_comments = true;
+            } else if (std.mem.eql(u8, arg, "--reverse")) {
+                result.reverse = true;
             } else if (std.mem.eql(u8, arg, "--help")) {
                 result.show_help = true;
             } else if (std.mem.eql(u8, arg, "--version")) {
@@ -116,6 +119,7 @@ pub fn printHelp(writer: anytype) !void {
         \\  --dry-run           Show what would be done without making changes
         \\  -v, --verbose       Show detailed progress
         \\  --keep-comments     Preserve comments in YAML output
+        \\  --reverse           Reverse: convert .yml to .bru
         \\  -h, --help          Show this help message
         \\  --version           Show version
         \\
