@@ -1,0 +1,70 @@
+meta {
+  name: full-example
+  type: http
+  seq: 5
+}
+
+put {
+  url: https://api.example.com/users/{{userId}}
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  ~X-Request-Id: abc123
+}
+
+auth:basic {
+  username: admin
+  password: secret123
+}
+
+body:json {
+  {
+    "name": "Updated Name",
+    "role": "admin"
+  }
+}
+
+params:query {
+  verbose: true
+}
+
+params:path {
+  userId: 42
+}
+
+vars:pre-request {
+  token: {{process.env.TOKEN}}
+}
+
+vars:post-response {
+  result: res.body.status
+}
+
+assert {
+  res.status: eq 200
+  res.body.name: eq Updated Name
+  res.body.role: contains admin
+}
+
+script:pre-request {
+  const token = bru.getEnvVar("TOKEN");
+  req.setHeader("Authorization", `Bearer ${token}`);
+}
+
+script:post-response {
+  const body = res.getBody();
+  bru.setVar("lastUpdate", body.updatedAt);
+}
+
+tests {
+  test("should return 200", function() {
+    expect(res.status).to.equal(200);
+  });
+}
+
+docs {
+  Update user profile.
+  Requires admin authentication.
+}

@@ -1,0 +1,24 @@
+meta {
+  name: graphql-query
+  type: graphql
+}
+
+post {
+  url: https://api.example.com/graphql
+}
+
+body:graphql {
+  query {
+    users(limit: $limit) {
+      id
+      name
+      email
+    }
+  }
+}
+
+body:graphql:vars {
+  {
+    "limit": 10
+  }
+}

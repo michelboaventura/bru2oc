@@ -1,0 +1,32 @@
+meta {
+  name: create-user
+  type: http
+  seq: 2
+}
+
+post {
+  url: https://api.example.com/users
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+}
+
+body:json {
+  {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "age": 30
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: exists
+}
+
+script:post-response {
+  const data = res.getBody();
+  bru.setVar("userId", data.id);
+}

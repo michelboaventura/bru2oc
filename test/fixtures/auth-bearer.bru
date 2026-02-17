@@ -1,0 +1,23 @@
+meta {
+  name: auth-test
+  type: http
+  seq: 3
+}
+
+get {
+  url: https://api.example.com/protected
+}
+
+auth:bearer {
+  token: my-secret-token
+}
+
+params:query {
+  page: 1
+  limit: 10
+  ~debug: true
+}
+
+params:path {
+  id: 123
+}

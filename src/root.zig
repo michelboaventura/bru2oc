@@ -9,6 +9,7 @@ pub const parser = @import("parser.zig");
 pub const opencollection = @import("opencollection.zig");
 pub const transformer = @import("transformer.zig");
 pub const yaml_emitter = @import("yaml_emitter.zig");
+pub const fs_utils = @import("fs_utils.zig");
 
 test {
     _ = errors;
@@ -19,4 +20,5 @@ test {
     _ = opencollection;
     _ = transformer;
     _ = yaml_emitter;
+    _ = fs_utils;
 }

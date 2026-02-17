@@ -1,0 +1,15 @@
+meta {
+  name: simple-get
+  type: http
+  seq: 1
+}
+
+get {
+  url: https://api.example.com/users
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  ~X-Debug: true
+}
