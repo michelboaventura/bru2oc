@@ -44,6 +44,23 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
+    // Benchmark executable
+    const bench_exe = b.addExecutable(.{
+        .name = "bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "bru2oc", .module = mod },
+            },
+        }),
+    });
+
+    const bench_step = b.step("bench", "Run performance benchmarks");
+    const bench_run = b.addRunArtifact(bench_exe);
+    bench_step.dependOn(&bench_run.step);
+
     // Cross-compilation targets
     const cross_step = b.step("cross", "Build for all release targets");
 
