@@ -20,26 +20,32 @@ jobs:
           - target: x86_64-linux-musl
             name: linux-x86_64
             artifact: bru2oc-linux-x86_64
+            binary: bru2oc-linux-x86_64
             archive: tar.gz
           - target: aarch64-linux-musl
             name: linux-aarch64
             artifact: bru2oc-linux-aarch64
+            binary: bru2oc-linux-aarch64
             archive: tar.gz
           - target: x86_64-macos
             name: macos-x86_64
             artifact: bru2oc-macos-x86_64
+            binary: bru2oc-macos-x86_64
             archive: tar.gz
           - target: aarch64-macos
             name: macos-aarch64
             artifact: bru2oc-macos-aarch64
+            binary: bru2oc-macos-aarch64
             archive: tar.gz
           - target: x86_64-windows
             name: windows-x86_64
-            artifact: bru2oc-windows-x86_64.exe
+            artifact: bru2oc-windows-x86_64
+            binary: bru2oc-windows-x86_64.exe
             archive: zip
           - target: aarch64-windows
             name: windows-aarch64
-            artifact: bru2oc-windows-aarch64.exe
+            artifact: bru2oc-windows-aarch64
+            binary: bru2oc-windows-aarch64.exe
             archive: zip
 
     steps:
@@ -63,17 +69,20 @@ jobs:
       - name: Build cross target
         run: zig build cross
 
+      - name: List built binaries
+        run: ls -la zig-out/bin/
+
       - name: Package (tar.gz)
         if: matrix.archive == 'tar.gz'
         run: |
           cd zig-out/bin
-          tar czf ../../${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+          tar czf ../../${{ matrix.artifact }}.tar.gz ${{ matrix.binary }}
 
       - name: Package (zip)
         if: matrix.archive == 'zip'
         run: |
           cd zig-out/bin
-          zip ../../${{ matrix.artifact }}.zip ${{ matrix.artifact }}
+          zip ../../${{ matrix.artifact }}.zip ${{ matrix.binary }}
 
       - name: Generate checksum
         run: |

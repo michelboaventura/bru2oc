@@ -72,8 +72,8 @@ pub fn build(b: *std.Build) void {
         .{ .query = .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl }, .name = "bru2oc-linux-aarch64" },
         .{ .query = .{ .cpu_arch = .x86_64, .os_tag = .macos }, .name = "bru2oc-macos-x86_64" },
         .{ .query = .{ .cpu_arch = .aarch64, .os_tag = .macos }, .name = "bru2oc-macos-aarch64" },
-        .{ .query = .{ .cpu_arch = .x86_64, .os_tag = .windows }, .name = "bru2oc-windows-x86_64.exe" },
-        .{ .query = .{ .cpu_arch = .aarch64, .os_tag = .windows }, .name = "bru2oc-windows-aarch64.exe" },
+        .{ .query = .{ .cpu_arch = .x86_64, .os_tag = .windows }, .name = "bru2oc-windows-x86_64" },
+        .{ .query = .{ .cpu_arch = .aarch64, .os_tag = .windows }, .name = "bru2oc-windows-aarch64" },
     };
 
     for (&release_targets) |rt| {
