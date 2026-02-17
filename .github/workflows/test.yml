@@ -1,0 +1,47 @@
+name: Tests
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Zig ${{ matrix.zig-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        zig-version: ["0.15.2", "master"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: ${{ matrix.zig-version }}
+
+      - name: Cache Zig build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            zig-cache
+          key: zig-${{ matrix.zig-version }}-${{ hashFiles('build.zig', 'src/**/*.zig') }}
+          restore-keys: |
+            zig-${{ matrix.zig-version }}-
+
+      - name: Check formatting
+        run: zig fmt --check src/
+
+      - name: Run tests
+        run: zig build test
+
+      - name: Build
+        run: zig build

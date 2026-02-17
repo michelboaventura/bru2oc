@@ -1,0 +1,88 @@
+name: Build
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-linux-musl
+            name: linux-x86_64
+            artifact: bru2oc-linux-x86_64
+            archive: tar.gz
+          - target: aarch64-linux-musl
+            name: linux-aarch64
+            artifact: bru2oc-linux-aarch64
+            archive: tar.gz
+          - target: x86_64-macos
+            name: macos-x86_64
+            artifact: bru2oc-macos-x86_64
+            archive: tar.gz
+          - target: aarch64-macos
+            name: macos-aarch64
+            artifact: bru2oc-macos-aarch64
+            archive: tar.gz
+          - target: x86_64-windows
+            name: windows-x86_64
+            artifact: bru2oc-windows-x86_64.exe
+            archive: zip
+          - target: aarch64-windows
+            name: windows-aarch64
+            artifact: bru2oc-windows-aarch64.exe
+            archive: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: "0.15.2"
+
+      - name: Cache Zig build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            zig-cache
+          key: zig-build-${{ matrix.target }}-${{ hashFiles('build.zig', 'src/**/*.zig') }}
+          restore-keys: |
+            zig-build-${{ matrix.target }}-
+
+      - name: Build cross target
+        run: zig build cross
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          cd zig-out/bin
+          tar czf ../../${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        run: |
+          cd zig-out/bin
+          zip ../../${{ matrix.artifact }}.zip ${{ matrix.artifact }}
+
+      - name: Generate checksum
+        run: |
+          sha256sum ${{ matrix.artifact }}.${{ matrix.archive }} > ${{ matrix.artifact }}.${{ matrix.archive }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            ${{ matrix.artifact }}.${{ matrix.archive }}
+            ${{ matrix.artifact }}.${{ matrix.archive }}.sha256
