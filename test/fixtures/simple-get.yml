@@ -1,0 +1,15 @@
+info:
+  name: simple-get
+  type: http
+  seq: 1
+http:
+  method: get
+  url: https://api.example.com/users
+  headers:
+    - name: Accept
+      value: application/json
+    - name: Content-Type
+      value: application/json
+    - name: X-Debug
+      value: ""
+      enabled: false

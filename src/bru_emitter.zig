@@ -9,8 +9,8 @@ pub fn emit(allocator: std.mem.Allocator, req: oc.OpenCollectionRequest) ![]cons
     // meta block
     try writer.writeAll("meta {\n");
     try writer.print("  name: {s}\n", .{req.info.name});
-    if (!std.mem.eql(u8, req.info.@"type", "http")) {
-        try writer.print("  type: {s}\n", .{req.info.@"type"});
+    if (!std.mem.eql(u8, req.info.type, "http")) {
+        try writer.print("  type: {s}\n", .{req.info.type});
     } else {
         try writer.writeAll("  type: http\n");
     }

@@ -140,7 +140,7 @@ const YamlParser = struct {
         }
 
         if (name == null) return error.MissingRequiredField;
-        return oc.Info{ .name = name.?, .@"type" = req_type, .seq = seq };
+        return oc.Info{ .name = name.?, .type = req_type, .seq = seq };
     }
 
     fn parseHttp(self: *YamlParser) YamlParseError!oc.Http {

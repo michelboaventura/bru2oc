@@ -128,7 +128,7 @@ pub fn formatError(allocator: std.mem.Allocator, err: ConversionError) ![]const 
         // Build caret line: spaces up to column, then ^
         const caret_buf = try allocator.alloc(u8, diag.column);
         defer allocator.free(caret_buf);
-        @memset(caret_buf[0 .. diag.column -| 1], ' ');
+        @memset(caret_buf[0..diag.column -| 1], ' ');
         if (diag.column > 0) {
             caret_buf[diag.column - 1] = '^';
         }

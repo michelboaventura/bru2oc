@@ -12,7 +12,7 @@ pub const OpenCollectionRequest = struct {
 /// Request metadata.
 pub const Info = struct {
     name: []const u8,
-    @"type": []const u8 = "http",
+    type: []const u8 = "http",
     seq: ?usize = null,
     tags: ?[]const []const u8 = null,
 };
@@ -217,7 +217,7 @@ test "OpenCollectionRequest with required fields" {
 }
 
 test "Info with optional fields" {
-    const info = Info{ .name = "my-request", .@"type" = "graphql", .seq = 5 };
+    const info = Info{ .name = "my-request", .type = "graphql", .seq = 5 };
     try std.testing.expectEqualStrings("my-request", info.name);
     try std.testing.expectEqual(@as(?usize, 5), info.seq);
 }

@@ -49,7 +49,7 @@ fn transformMeta(arena: std.mem.Allocator, doc: BruDocument) errors.TransformErr
                 if (std.mem.eql(u8, entry.key, "name")) {
                     info.name = entry.value.asString() orelse "untitled";
                 } else if (std.mem.eql(u8, entry.key, "type")) {
-                    info.@"type" = entry.value.asString() orelse "http";
+                    info.type = entry.value.asString() orelse "http";
                 } else if (std.mem.eql(u8, entry.key, "seq")) {
                     if (entry.value.asString()) |s| {
                         info.seq = std.fmt.parseInt(usize, s, 10) catch null;
@@ -512,7 +512,7 @@ test "transform meta block" {
 
     const req = try parseAndTransform(alloc, source);
     try std.testing.expectEqualStrings("my-request", req.info.name);
-    try std.testing.expectEqualStrings("http", req.info.@"type");
+    try std.testing.expectEqualStrings("http", req.info.type);
     try std.testing.expectEqual(@as(?usize, 3), req.info.seq);
 }
 

@@ -31,7 +31,7 @@ pub fn emit(allocator: std.mem.Allocator, req: oc.OpenCollectionRequest, options
 fn emitInfo(writer: anytype, info: oc.Info) !void {
     try writer.writeAll("info:\n");
     try writer.print("  name: {s}\n", .{info.name});
-    try writer.print("  type: {s}\n", .{info.@"type"});
+    try writer.print("  type: {s}\n", .{info.type});
     if (info.seq) |seq| {
         try writer.print("  seq: {d}\n", .{seq});
     }
