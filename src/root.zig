@@ -23,4 +23,5 @@ test {
     _ = yaml_emitter;
     _ = fs_utils;
     _ = converter;
+    _ = @import("integration_test.zig");
 }
