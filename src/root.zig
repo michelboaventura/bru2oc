@@ -24,4 +24,5 @@ test {
     _ = fs_utils;
     _ = converter;
     _ = @import("integration_test.zig");
+    _ = @import("fuzz_test.zig");
 }
