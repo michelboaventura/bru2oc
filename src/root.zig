@@ -6,6 +6,7 @@ pub const ir = @import("ir.zig");
 pub const tokenizer = @import("tokenizer.zig");
 pub const cli = @import("cli.zig");
 pub const parser = @import("parser.zig");
+pub const opencollection = @import("opencollection.zig");
 
 test {
     _ = errors;
@@ -13,4 +14,5 @@ test {
     _ = tokenizer;
     _ = cli;
     _ = parser;
+    _ = opencollection;
 }
