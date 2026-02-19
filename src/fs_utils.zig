@@ -90,6 +90,19 @@ pub fn resolveOutputPath(
     return std.fmt.allocPrint(allocator, "{s}/{s}", .{ output_dir.?, relative });
 }
 
+/// Check if a file is a folder.bru or collection.bru file (collection/folder config).
+pub fn isFolderBru(path: []const u8) bool {
+    const basename = std.fs.path.basename(path);
+    return std.mem.eql(u8, basename, "folder.bru") or
+        std.mem.eql(u8, basename, "collection.bru");
+}
+
+/// Check if a file is a collection.bru file (outputs as opencollection.yml).
+pub fn isCollectionBru(path: []const u8) bool {
+    const basename = std.fs.path.basename(path);
+    return std.mem.eql(u8, basename, "collection.bru");
+}
+
 /// Create directory structure for an output path.
 pub fn ensureOutputDir(path: []const u8) !void {
     if (std.fs.path.dirname(path)) |dir| {
@@ -136,10 +149,15 @@ pub fn verifyYaml(content: []const u8) bool {
     // Must have at least one colon (key: value)
     if (std.mem.indexOf(u8, content, ":") == null) return false;
 
-    // Check for consistent indentation (multiples of 2)
+    // Check for consistent indentation (multiples of 2), skipping literal block content
     var iter = std.mem.splitScalar(u8, content, '\n');
+    var in_block_scalar = false;
+    var block_scalar_indent: usize = 0;
     while (iter.next()) |line| {
-        if (line.len == 0) continue;
+        if (line.len == 0) {
+            // Empty lines don't end block scalars
+            continue;
+        }
         // Count leading spaces
         var spaces: usize = 0;
         for (line) |c| {
@@ -152,8 +170,25 @@ pub fn verifyYaml(content: []const u8) bool {
         // Skip comment lines and empty content lines
         if (spaces == line.len) continue;
         if (line[spaces] == '#') continue;
+        // Detect end of block scalar (line with equal or less indent than the key)
+        if (in_block_scalar) {
+            if (spaces <= block_scalar_indent) {
+                in_block_scalar = false;
+            } else {
+                // Inside block scalar content — skip indentation check
+                continue;
+            }
+        }
         // Indent should be multiple of 2
         if (spaces % 2 != 0) return false;
+        // Detect start of literal block scalar (line ending with | or |-)
+        const trimmed = std.mem.trimRight(u8, line, " ");
+        if (trimmed.len > 0 and (trimmed[trimmed.len - 1] == '|' or
+            (trimmed.len >= 2 and trimmed[trimmed.len - 2] == '|' and trimmed[trimmed.len - 1] == '-')))
+        {
+            in_block_scalar = true;
+            block_scalar_indent = spaces;
+        }
     }
 
     return true;

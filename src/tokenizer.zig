@@ -119,6 +119,11 @@ pub const Tokenizer = struct {
                 _ = self.advance();
                 return tok(.tilde, start_line, start_col, self.source[start_pos..self.pos]);
             },
+            ',' => {
+                // Skip comma separators (used in arrays) and return next token
+                _ = self.advance();
+                return self.next();
+            },
             '\n' => {
                 _ = self.advance();
                 return tok(.newline, start_line, start_col, self.source[start_pos..self.pos]);
@@ -226,9 +231,23 @@ pub const Tokenizer = struct {
         // Read an unquoted word (everything until whitespace, colon, brace, bracket, newline, or comment)
         while (self.pos < self.source.len) {
             const ch = self.source[self.pos];
+            if (ch == '[') {
+                // Consume balanced bracket expression as part of the word (e.g. key[qualifier])
+                self.pos += 1;
+                self.column += 1;
+                while (self.pos < self.source.len and self.source[self.pos] != ']' and self.source[self.pos] != '\n') {
+                    self.pos += 1;
+                    self.column += 1;
+                }
+                if (self.pos < self.source.len and self.source[self.pos] == ']') {
+                    self.pos += 1;
+                    self.column += 1;
+                }
+                continue;
+            }
             if (ch == ' ' or ch == '\t' or ch == '\n' or ch == '\r' or
                 ch == ':' or ch == '{' or ch == '}' or
-                ch == '[' or ch == ']' or ch == '#' or ch == ',')
+                ch == ']' or ch == '#' or ch == ',')
             {
                 break;
             }

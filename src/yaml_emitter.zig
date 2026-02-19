@@ -6,6 +6,58 @@ pub const EmitOptions = struct {
     indent_size: usize = 2,
 };
 
+/// Emit an OpenCollectionEnvironment as YAML text.
+/// Caller owns the returned slice.
+pub fn emitEnvironment(allocator: std.mem.Allocator, env: oc.OpenCollectionEnvironment, options: EmitOptions) ![]const u8 {
+    _ = options;
+    var buf: std.ArrayListUnmanaged(u8) = .empty;
+    const writer = buf.writer(allocator);
+
+    if (env.variables) |variables| {
+        try writer.writeAll("variables:\n");
+        for (variables) |v| {
+            try writer.print("  - name: {s}\n", .{v.name});
+            if (v.secret) {
+                try writer.writeAll("    secret: true\n");
+            } else {
+                try emitYamlValue(writer, "    value", v.value);
+            }
+            if (!v.enabled) {
+                try writer.writeAll("    enabled: false\n");
+            }
+        }
+    }
+
+    return buf.toOwnedSlice(allocator);
+}
+
+/// Emit an OpenCollectionFolder as YAML text.
+/// Caller owns the returned slice.
+pub fn emitFolder(allocator: std.mem.Allocator, folder: oc.OpenCollectionFolder, options: EmitOptions) ![]const u8 {
+    var buf: std.ArrayListUnmanaged(u8) = .empty;
+    const writer = buf.writer(allocator);
+
+    try emitInfo(writer, folder.info);
+
+    if (folder.headers) |headers| {
+        try emitTopLevelHeaders(writer, headers);
+    }
+
+    if (folder.auth) |auth| {
+        try emitTopLevelAuth(writer, auth);
+    }
+
+    if (folder.runtime) |runtime| {
+        try emitRuntime(writer, runtime, options);
+    }
+
+    if (folder.docs) |docs| {
+        try emitDocs(writer, docs);
+    }
+
+    return buf.toOwnedSlice(allocator);
+}
+
 /// Emit an OpenCollectionRequest as YAML text.
 /// Caller owns the returned slice.
 pub fn emit(allocator: std.mem.Allocator, req: oc.OpenCollectionRequest, options: EmitOptions) ![]const u8 {
@@ -48,7 +100,7 @@ fn emitInfo(writer: anytype, info: oc.Info) !void {
 fn emitHttp(writer: anytype, http: oc.Http, options: EmitOptions) !void {
     try writer.writeAll("http:\n");
     try writer.print("  method: {s}\n", .{http.method});
-    try writer.print("  url: {s}\n", .{http.url});
+    try emitYamlValue(writer, "  url", http.url);
 
     if (http.headers) |headers| {
         try emitHeaders(writer, headers);
@@ -73,6 +125,19 @@ fn emitHeaders(writer: anytype, headers: []const oc.Header) !void {
         try emitYamlValue(writer, "      value", h.value);
         if (!h.enabled) {
             try writer.writeAll("      enabled: false\n");
+        }
+    }
+}
+
+// ── Top-level Headers (for folder.bru) ──────────────────────────────────
+
+fn emitTopLevelHeaders(writer: anytype, headers: []const oc.Header) !void {
+    try writer.writeAll("headers:\n");
+    for (headers) |h| {
+        try writer.print("  - name: {s}\n", .{h.name});
+        try emitYamlValue(writer, "    value", h.value);
+        if (!h.enabled) {
+            try writer.writeAll("    enabled: false\n");
         }
     }
 }
@@ -207,6 +272,63 @@ fn emitAuth(writer: anytype, auth: oc.Auth) !void {
         },
         .none => {
             try writer.writeAll("    type: none\n");
+        },
+    }
+}
+
+// ── Top-level Auth (for folder.bru) ──────────────────────────────────────
+
+fn emitTopLevelAuth(writer: anytype, auth: oc.Auth) !void {
+    try writer.writeAll("auth:\n");
+    switch (auth) {
+        .bearer => |b| {
+            try writer.writeAll("  type: bearer\n");
+            try emitYamlValue(writer, "  token", b.token);
+            if (b.prefix) |p| {
+                try writer.print("  prefix: {s}\n", .{p});
+            }
+        },
+        .basic => |b| {
+            try writer.writeAll("  type: basic\n");
+            try emitYamlValue(writer, "  username", b.username);
+            try emitYamlValue(writer, "  password", b.password);
+        },
+        .oauth2 => |o| {
+            try writer.writeAll("  type: oauth2\n");
+            try emitYamlValue(writer, "  accessToken", o.access_token);
+            if (o.token_type) |tt| {
+                try writer.print("  tokenType: {s}\n", .{tt});
+            }
+            if (o.refresh_token) |rt| {
+                try emitYamlValue(writer, "  refreshToken", rt);
+            }
+        },
+        .aws_v4 => |a| {
+            try writer.writeAll("  type: awsv4\n");
+            try emitYamlValue(writer, "  accessKeyId", a.access_key);
+            try emitYamlValue(writer, "  secretAccessKey", a.secret_key);
+            try writer.print("  region: {s}\n", .{a.region});
+            try writer.print("  service: {s}\n", .{a.service});
+            if (a.session_token) |st| {
+                try emitYamlValue(writer, "  sessionToken", st);
+            }
+        },
+        .digest => |d| {
+            try writer.writeAll("  type: digest\n");
+            try emitYamlValue(writer, "  username", d.username);
+            try emitYamlValue(writer, "  password", d.password);
+            if (d.realm) |r| {
+                try writer.print("  realm: {s}\n", .{r});
+            }
+        },
+        .api_key => |a| {
+            try writer.writeAll("  type: apikey\n");
+            try emitYamlValue(writer, "  key", a.key);
+            try emitYamlValue(writer, "  value", a.value);
+            try writer.print("  placement: {s}\n", .{a.placement});
+        },
+        .none => {
+            try writer.writeAll("  type: none\n");
         },
     }
 }

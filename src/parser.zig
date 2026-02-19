@@ -77,6 +77,8 @@ pub const Parser = struct {
             const next_tok = try self.advance();
             var block_name: []const u8 = block_name_start;
 
+            var is_array_block = false;
+
             if (next_tok != null and next_tok.?.token == .colon) {
                 const qual_tok = try self.advance();
                 if (qual_tok == null or (qual_tok.?.token != .string and qual_tok.?.token != .number)) {
@@ -84,21 +86,26 @@ pub const Parser = struct {
                 }
                 block_name = std.fmt.allocPrint(self.arena, "{s}:{s}", .{ block_name_start, qual_tok.?.lexeme }) catch return error.UnexpectedToken;
                 const after_qual = try self.skipNewlines();
-                if (after_qual == null or after_qual.?.token != .l_brace) {
+                if (after_qual == null or (after_qual.?.token != .l_brace and after_qual.?.token != .l_bracket)) {
                     return error.UnexpectedToken;
                 }
-            } else if (next_tok != null and next_tok.?.token == .l_brace) {
-                // Direct block: name {
+                is_array_block = after_qual.?.token == .l_bracket;
+            } else if (next_tok != null and (next_tok.?.token == .l_brace or next_tok.?.token == .l_bracket)) {
+                is_array_block = next_tok.?.token == .l_bracket;
             } else if (next_tok != null and next_tok.?.token == .newline) {
                 const brace_tok = try self.skipNewlines();
-                if (brace_tok == null or brace_tok.?.token != .l_brace) {
+                if (brace_tok == null or (brace_tok.?.token != .l_brace and brace_tok.?.token != .l_bracket)) {
                     return error.UnexpectedToken;
                 }
+                is_array_block = brace_tok.?.token == .l_bracket;
             } else {
                 return error.UnexpectedToken;
             }
 
-            const value = try self.parseBlockContent(block_name);
+            const value = if (is_array_block)
+                try self.parseArray()
+            else
+                try self.parseBlockContent(block_name);
             const entry = Entry.init(block_name, value).withLine(tok.?.line);
             entries.append(self.arena, entry) catch return error.UnexpectedToken;
         }
@@ -274,10 +281,30 @@ pub const Parser = struct {
                 break :blk Value{ .string = first };
             },
             .l_bracket => try self.parseArray(),
-            .l_brace => try self.parseMultimapContent(),
+            .l_brace => blk: {
+                // Check if this is a template variable {{...}} - treat as string value
+                if (self.tokenizer.pos < self.tokenizer.source.len and
+                    self.tokenizer.source[self.tokenizer.pos] == '{')
+                {
+                    const rest = self.readRestOfLine();
+                    const full = std.fmt.allocPrint(self.arena, "{{{s}", .{rest}) catch
+                        break :blk Value{ .string = "{" };
+                    break :blk Value{ .string = full };
+                }
+                break :blk try self.parseMultimapContent();
+            },
             .newline, .eof => Value{ .null = {} },
             .triple_quote => try self.parseTripleQuotedString(),
-            else => Value{ .string = tok.?.lexeme },
+            else => blk: {
+                // For annotations or other tokens appearing as values, read rest of line
+                const rest = self.readRestOfLine();
+                if (rest.len > 0) {
+                    const full = std.fmt.allocPrint(self.arena, "{s}{s}", .{ tok.?.lexeme, rest }) catch
+                        break :blk Value{ .string = tok.?.lexeme };
+                    break :blk Value{ .string = full };
+                }
+                break :blk Value{ .string = tok.?.lexeme };
+            },
         };
     }
 

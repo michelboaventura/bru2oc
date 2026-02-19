@@ -1,5 +1,27 @@
 const std = @import("std");
 
+/// Top-level OpenCollection environment representation (for environment .bru files).
+pub const OpenCollectionEnvironment = struct {
+    variables: ?[]const EnvVar = null,
+};
+
+/// An environment variable.
+pub const EnvVar = struct {
+    name: []const u8,
+    value: []const u8 = "",
+    secret: bool = false,
+    enabled: bool = true,
+};
+
+/// Top-level OpenCollection folder representation (for folder.bru files).
+pub const OpenCollectionFolder = struct {
+    info: Info,
+    headers: ?[]const Header = null,
+    auth: ?Auth = null,
+    runtime: ?Runtime = null,
+    docs: ?Docs = null,
+};
+
 /// Top-level OpenCollection request representation.
 pub const OpenCollectionRequest = struct {
     info: Info,

@@ -64,40 +64,54 @@ pub fn convertFile(
         };
     };
 
-    // Transform
-    const oc_request = transformer.transform(arena_alloc, doc) catch {
-        return ConversionResult{
-            .input_path = input_path,
-            .success = false,
-            .error_msg = "Transform error",
+    const is_folder = fs_utils.isFolderBru(input_path);
+    const is_request = transformer.isRequestDocument(doc);
+    const emit_opts = yaml_emitter.EmitOptions{ .include_comments = options.keep_comments };
+
+    // Transform & emit YAML based on document type
+    const yaml_output = if (is_folder) blk: {
+        const oc_folder = transformer.transformFolder(arena_alloc, doc) catch {
+            break :blk @as(?[]const u8, null);
         };
+        break :blk yaml_emitter.emitFolder(allocator, oc_folder, emit_opts) catch null;
+    } else if (is_request) blk: {
+        const oc_request = transformer.transform(arena_alloc, doc) catch {
+            break :blk @as(?[]const u8, null);
+        };
+        break :blk yaml_emitter.emit(allocator, oc_request, emit_opts) catch null;
+    } else blk: {
+        const oc_env = transformer.transformEnvironment(arena_alloc, doc) catch {
+            break :blk @as(?[]const u8, null);
+        };
+        break :blk yaml_emitter.emitEnvironment(allocator, oc_env, emit_opts) catch null;
     };
 
-    // Emit YAML
-    const yaml_output = yaml_emitter.emit(allocator, oc_request, .{
-        .include_comments = options.keep_comments,
-    }) catch {
+    if (yaml_output == null) {
         return ConversionResult{
             .input_path = input_path,
             .success = false,
-            .error_msg = "YAML emit error",
+            .error_msg = if (is_folder) "Folder transform error" else "Transform error",
         };
-    };
-    defer allocator.free(yaml_output);
+    }
+    defer allocator.free(yaml_output.?);
 
-    // Resolve output path
-    const output_path = fs_utils.resolveOutputPath(
-        allocator,
-        input_path,
-        options.output_dir,
-        options.base_dir,
-    ) catch {
-        return ConversionResult{
-            .input_path = input_path,
-            .success = false,
-            .error_msg = "Failed to resolve output path",
+    // Resolve output path (collection.bru -> opencollection.yml, everything else .bru -> .yml)
+    const output_path = if (fs_utils.isCollectionBru(input_path))
+        resolveCollectionOutputPath(allocator, input_path, options.output_dir) catch {
+            return ConversionResult{
+                .input_path = input_path,
+                .success = false,
+                .error_msg = "Failed to resolve output path",
+            };
+        }
+    else
+        fs_utils.resolveOutputPath(allocator, input_path, options.output_dir, options.base_dir) catch {
+            return ConversionResult{
+                .input_path = input_path,
+                .success = false,
+                .error_msg = "Failed to resolve output path",
+            };
         };
-    };
 
     if (options.dry_run) {
         return ConversionResult{
@@ -129,7 +143,7 @@ pub fn convertFile(
     };
     defer file.close();
 
-    file.writeAll(yaml_output) catch {
+    file.writeAll(yaml_output.?) catch {
         return ConversionResult{
             .input_path = input_path,
             .output_path = output_path,
@@ -139,7 +153,7 @@ pub fn convertFile(
     };
 
     // Verify
-    if (!fs_utils.verifyYaml(yaml_output)) {
+    if (!fs_utils.verifyYaml(yaml_output.?)) {
         return ConversionResult{
             .input_path = input_path,
             .output_path = output_path,
@@ -170,19 +184,38 @@ pub fn convertBatch(
     var results: std.ArrayListUnmanaged(ConversionResult) = .empty;
 
     // Check if it's a single file
-    if (fs_utils.hasBruExtension(path)) {
+    if (isBrunoJson(path)) {
+        const result = convertBrunoJson(allocator, path, options);
+        results.append(allocator, result) catch {};
+        logResult(writer, result, options.verbose);
+    } else if (fs_utils.hasBruExtension(path)) {
         const result = convertFile(allocator, path, options);
         results.append(allocator, result) catch {};
         logResult(writer, result, options.verbose);
     } else {
-        // Directory - walk for .bru files
+        // Directory - walk for .bru files and bruno.json
         const files = try fs_utils.walkBruFiles(allocator, path);
         defer {
             for (files) |f| allocator.free(f);
             allocator.free(files);
         }
 
-        if (files.len == 0) {
+        // Also check for bruno.json in the directory root
+        const bruno_json_path = std.fmt.allocPrint(allocator, "{s}/bruno.json", .{path}) catch null;
+        if (bruno_json_path) |bjp| {
+            defer allocator.free(bjp);
+            if (std.fs.cwd().access(bjp, .{})) |_| {
+                const bj_path = allocator.dupe(u8, bjp) catch null;
+                if (bj_path) |p| {
+                    defer allocator.free(p);
+                    const result = convertBrunoJson(allocator, p, options);
+                    logResult(writer, result, options.verbose);
+                    results.append(allocator, result) catch {};
+                }
+            } else |_| {}
+        }
+
+        if (files.len == 0 and results.items.len == 0) {
             try writer.print("No .bru files found in {s}\n", .{path});
         }
 
@@ -228,6 +261,122 @@ pub fn convertBatch(
         .skipped = skipped,
         .results = results.toOwnedSlice(allocator) catch &.{},
     };
+}
+
+/// Resolve output path for collection.bru/bruno.json -> opencollection.yml.
+fn resolveCollectionOutputPath(allocator: std.mem.Allocator, input: []const u8, output_dir: ?[]const u8) ![]const u8 {
+    const dir = std.fs.path.dirname(input) orelse ".";
+    if (output_dir) |od| {
+        return std.fmt.allocPrint(allocator, "{s}/opencollection.yml", .{od});
+    }
+    return std.fmt.allocPrint(allocator, "{s}/opencollection.yml", .{dir});
+}
+
+/// Check if a file is bruno.json.
+fn isBrunoJson(path: []const u8) bool {
+    const basename = std.fs.path.basename(path);
+    return std.mem.eql(u8, basename, "bruno.json");
+}
+
+/// Convert a bruno.json file to opencollection.yml.
+fn convertBrunoJson(
+    allocator: std.mem.Allocator,
+    input_path: []const u8,
+    options: ConvertOptions,
+) ConversionResult {
+    const input_content = std.fs.cwd().readFileAlloc(allocator, input_path, 10 * 1024 * 1024) catch |err| {
+        return ConversionResult{
+            .input_path = input_path,
+            .success = false,
+            .error_msg = switch (err) {
+                error.FileNotFound => "File not found",
+                error.AccessDenied => "Permission denied",
+                else => "Failed to read file",
+            },
+        };
+    };
+    defer allocator.free(input_content);
+
+    // Parse JSON
+    const parsed = std.json.parseFromSlice(std.json.Value, allocator, input_content, .{}) catch {
+        return ConversionResult{
+            .input_path = input_path,
+            .success = false,
+            .error_msg = "JSON parse error",
+        };
+    };
+    defer parsed.deinit();
+
+    const root = parsed.value.object;
+    const name = if (root.get("name")) |v| switch (v) {
+        .string => |s| s,
+        else => "untitled",
+    } else "untitled";
+
+    // Build YAML output
+    var buf: std.ArrayListUnmanaged(u8) = .empty;
+    const writer = buf.writer(allocator);
+
+    writer.writeAll("opencollection: 1.0.0\n\ninfo:\n") catch {
+        return ConversionResult{ .input_path = input_path, .success = false, .error_msg = "YAML emit error" };
+    };
+    writer.print("  name: {s}\n", .{name}) catch {
+        return ConversionResult{ .input_path = input_path, .success = false, .error_msg = "YAML emit error" };
+    };
+    writer.writeAll("bundled: false\n") catch {
+        return ConversionResult{ .input_path = input_path, .success = false, .error_msg = "YAML emit error" };
+    };
+
+    // Write ignore list under extensions.bruno
+    if (root.get("ignore")) |ignore_val| {
+        switch (ignore_val) {
+            .array => |items| {
+                writer.writeAll("extensions:\n  bruno:\n    ignore:\n") catch {};
+                for (items.items) |item| {
+                    switch (item) {
+                        .string => |s| {
+                            writer.print("      - {s}\n", .{s}) catch {};
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+
+    const yaml_output = buf.toOwnedSlice(allocator) catch {
+        return ConversionResult{ .input_path = input_path, .success = false, .error_msg = "YAML emit error" };
+    };
+    defer allocator.free(yaml_output);
+
+    // Resolve output path
+    const output_path = resolveCollectionOutputPath(allocator, input_path, options.output_dir) catch {
+        return ConversionResult{ .input_path = input_path, .success = false, .error_msg = "Failed to resolve output path" };
+    };
+
+    if (options.dry_run) {
+        return ConversionResult{ .input_path = input_path, .output_path = output_path, .success = true, .skipped = true };
+    }
+
+    fs_utils.ensureOutputDir(output_path) catch {
+        return ConversionResult{ .input_path = input_path, .output_path = output_path, .success = false, .error_msg = "Failed to create output directory" };
+    };
+
+    const file = std.fs.cwd().createFile(output_path, .{}) catch {
+        return ConversionResult{ .input_path = input_path, .output_path = output_path, .success = false, .error_msg = "Failed to create output file" };
+    };
+    defer file.close();
+
+    file.writeAll(yaml_output) catch {
+        return ConversionResult{ .input_path = input_path, .output_path = output_path, .success = false, .error_msg = "Failed to write output" };
+    };
+
+    if (options.delete_original) {
+        std.fs.cwd().deleteFile(input_path) catch {};
+    }
+
+    return ConversionResult{ .input_path = input_path, .output_path = output_path, .success = true };
 }
 
 fn logResult(writer: anytype, result: ConversionResult, verbose: bool) void {

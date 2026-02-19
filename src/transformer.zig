@@ -7,6 +7,66 @@ const Value = ir.Value;
 const Entry = ir.Entry;
 const BruDocument = ir.BruDocument;
 
+/// Check if a parsed document contains an HTTP method block (i.e., is a request).
+pub fn isRequestDocument(doc: BruDocument) bool {
+    return extractMethod(doc) != null;
+}
+
+/// Transform a parsed BruDocument (environment file) into an OpenCollectionEnvironment.
+pub fn transformEnvironment(arena: std.mem.Allocator, doc: BruDocument) errors.TransformError!oc.OpenCollectionEnvironment {
+    var variables: std.ArrayListUnmanaged(oc.EnvVar) = .empty;
+
+    if (doc.getFirst("vars")) |block| {
+        switch (block.value) {
+            .multimap => |entries| {
+                for (entries) |entry| {
+                    variables.append(arena, oc.EnvVar{
+                        .name = entry.key,
+                        .value = entry.value.asString() orelse "",
+                        .enabled = !entry.disabled,
+                    }) catch return error.MissingRequiredField;
+                }
+            },
+            else => {},
+        }
+    }
+
+    if (doc.getFirst("vars:secret")) |block| {
+        switch (block.value) {
+            .array => |items| {
+                for (items) |item| {
+                    if (item.asString()) |s| {
+                        variables.append(arena, oc.EnvVar{
+                            .name = s,
+                            .secret = true,
+                        }) catch return error.MissingRequiredField;
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+
+    return oc.OpenCollectionEnvironment{
+        .variables = if (variables.items.len > 0)
+            variables.toOwnedSlice(arena) catch return error.MissingRequiredField
+        else
+            null,
+    };
+}
+
+/// Transform a parsed BruDocument (from a folder.bru) into an OpenCollectionFolder.
+pub fn transformFolder(arena: std.mem.Allocator, doc: BruDocument) errors.TransformError!oc.OpenCollectionFolder {
+    const info = try transformMeta(arena, doc);
+    return oc.OpenCollectionFolder{
+        .info = info,
+        .headers = try transformHeaders(arena, doc),
+        .auth = try transformAuth(arena, doc),
+        .runtime = try transformRuntime(arena, doc),
+        .docs = transformDocs(doc),
+    };
+}
+
 /// Transform a parsed BruDocument into an OpenCollectionRequest.
 pub fn transform(arena: std.mem.Allocator, doc: BruDocument) errors.TransformError!oc.OpenCollectionRequest {
     const info = try transformMeta(arena, doc);
