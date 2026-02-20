@@ -88,6 +88,7 @@ pub fn transform(arena: std.mem.Allocator, doc: BruDocument) errors.TransformErr
     };
 
     result.runtime = try transformRuntime(arena, doc);
+    result.settings = transformSettings(doc);
     result.docs = transformDocs(doc);
 
     return result;
@@ -144,6 +145,26 @@ fn extractUrl(doc: BruDocument) ?[]const u8 {
                 .multimap => |entries| {
                     for (entries) |entry| {
                         if (std.mem.eql(u8, entry.key, "url")) {
+                            return entry.value.asString();
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return null;
+}
+
+/// Extract a key-value from inside the HTTP method block (e.g., auth, body).
+fn extractMethodBlockValue(doc: BruDocument, key: []const u8) ?[]const u8 {
+    for (&http_methods) |method| {
+        const block = doc.getFirst(method);
+        if (block != null) {
+            switch (block.?.value) {
+                .multimap => |entries| {
+                    for (entries) |entry| {
+                        if (std.mem.eql(u8, entry.key, key)) {
                             return entry.value.asString();
                         }
                     }
@@ -252,6 +273,17 @@ fn transformBody(doc: BruDocument) ?oc.Body {
     if (doc.getFirst("body:multipart-form")) |block| {
         if (block.value.asString()) |s| return oc.Body{ .text = s };
     }
+
+    // Check body mode declared inside the HTTP method block (e.g., body: json)
+    // This handles the case where a body type is specified but no content block exists
+    if (extractMethodBlockValue(doc, "body")) |body_mode| {
+        if (std.mem.eql(u8, body_mode, "json")) return oc.Body{ .json = "" };
+        if (std.mem.eql(u8, body_mode, "xml")) return oc.Body{ .xml = "" };
+        if (std.mem.eql(u8, body_mode, "text")) return oc.Body{ .text = "" };
+        if (std.mem.eql(u8, body_mode, "sparql")) return oc.Body{ .sparql = "" };
+        if (std.mem.eql(u8, body_mode, "graphql")) return oc.Body{ .graphql = oc.GraphQL{ .query = "" } };
+    }
+
     return null;
 }
 
@@ -259,6 +291,19 @@ fn transformBody(doc: BruDocument) ?oc.Body {
 
 fn transformAuth(arena: std.mem.Allocator, doc: BruDocument) errors.TransformError!?oc.Auth {
     _ = arena;
+
+    // Check for auth mode declared inside the HTTP method block (e.g., auth: inherit, auth: none)
+    if (extractMethodBlockValue(doc, "auth")) |auth_mode| {
+        if (std.mem.eql(u8, auth_mode, "inherit")) {
+            return oc.Auth{ .inherit = {} };
+        }
+        if (std.mem.eql(u8, auth_mode, "none")) {
+            return oc.Auth{ .none = {} };
+        }
+        // For specific auth types (e.g. "auth: bearer"), fall through to check
+        // the dedicated auth block below
+    }
+
     if (doc.getFirst("auth:bearer")) |block| {
         switch (block.value) {
             .multimap => |entries| {
@@ -372,6 +417,39 @@ fn transformAuth(arena: std.mem.Allocator, doc: BruDocument) errors.TransformErr
     }
 
     return null;
+}
+
+// ── Settings ────────────────────────────────────────────────────────────
+
+fn transformSettings(doc: BruDocument) ?oc.Settings {
+    const block = doc.getFirst("settings");
+    if (block == null) return null;
+
+    var settings = oc.Settings{};
+    var has_any = false;
+
+    switch (block.?.value) {
+        .multimap => |entries| {
+            for (entries) |entry| {
+                if (std.mem.eql(u8, entry.key, "timeout")) {
+                    if (entry.value.asString()) |s| {
+                        settings.timeout = std.fmt.parseInt(usize, s, 10) catch null;
+                        has_any = true;
+                    }
+                } else if (std.mem.eql(u8, entry.key, "followRedirects")) {
+                    settings.follow_redirects = entry.value.asBool();
+                    has_any = true;
+                } else if (std.mem.eql(u8, entry.key, "encodeUrl")) {
+                    settings.encode_url = entry.value.asBool();
+                    has_any = true;
+                }
+            }
+        },
+        else => {},
+    }
+
+    if (!has_any) return null;
+    return settings;
 }
 
 // ── Scripts & Tests (Task 18) ───────────────────────────────────────────

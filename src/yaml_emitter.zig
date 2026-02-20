@@ -67,6 +67,10 @@ pub fn emit(allocator: std.mem.Allocator, req: oc.OpenCollectionRequest, options
     try emitInfo(writer, req.info);
     try emitHttp(writer, req.http, options);
 
+    if (req.settings) |settings| {
+        try emitSettings(writer, settings);
+    }
+
     if (req.runtime) |runtime| {
         try emitRuntime(writer, runtime, options);
     }
@@ -270,6 +274,9 @@ fn emitAuth(writer: anytype, auth: oc.Auth) !void {
             try emitYamlValue(writer, "    value", a.value);
             try writer.print("    placement: {s}\n", .{a.placement});
         },
+        .inherit => {
+            try writer.writeAll("    type: inherit\n");
+        },
         .none => {
             try writer.writeAll("    type: none\n");
         },
@@ -327,9 +334,27 @@ fn emitTopLevelAuth(writer: anytype, auth: oc.Auth) !void {
             try emitYamlValue(writer, "  value", a.value);
             try writer.print("  placement: {s}\n", .{a.placement});
         },
+        .inherit => {
+            try writer.writeAll("  type: inherit\n");
+        },
         .none => {
             try writer.writeAll("  type: none\n");
         },
+    }
+}
+
+// ── Settings Section ────────────────────────────────────────────────────
+
+fn emitSettings(writer: anytype, settings: oc.Settings) !void {
+    try writer.writeAll("settings:\n");
+    if (settings.encode_url) |v| {
+        try writer.print("  encodeUrl: {s}\n", .{if (v) "true" else "false"});
+    }
+    if (settings.timeout) |t| {
+        try writer.print("  timeout: {d}\n", .{t});
+    }
+    if (settings.follow_redirects) |v| {
+        try writer.print("  followRedirects: {s}\n", .{if (v) "true" else "false"});
     }
 }
 

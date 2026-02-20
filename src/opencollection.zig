@@ -39,10 +39,11 @@ pub const Info = struct {
     tags: ?[]const []const u8 = null,
 };
 
-/// Placeholder for request-level settings.
+/// Request-level settings.
 pub const Settings = struct {
     timeout: ?usize = null,
     follow_redirects: ?bool = null,
+    encode_url: ?bool = null,
 };
 
 /// Documentation block.
@@ -124,6 +125,7 @@ pub const Auth = union(enum) {
     aws_v4: AwsV4Auth,
     digest: DigestAuth,
     api_key: ApiKeyAuth,
+    inherit: void,
     none: void,
 };
 

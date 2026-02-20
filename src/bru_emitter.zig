@@ -22,6 +22,33 @@ pub fn emit(allocator: std.mem.Allocator, req: oc.OpenCollectionRequest) ![]cons
     // method + url block
     try writer.print("\n{s} {{\n", .{req.http.method});
     try writer.print("  url: {s}\n", .{req.http.url});
+    if (req.http.body) |body| {
+        const body_mode: ?[]const u8 = switch (body) {
+            .json => "json",
+            .xml => "xml",
+            .text => "text",
+            .graphql => "graphql",
+            .sparql => "sparql",
+            .form_urlencoded => "form-urlencoded",
+            .multipart_form => "multipart-form",
+        };
+        if (body_mode) |mode| {
+            try writer.print("  body: {s}\n", .{mode});
+        }
+    }
+    if (req.http.auth) |auth| {
+        const auth_mode: []const u8 = switch (auth) {
+            .inherit => "inherit",
+            .none => "none",
+            .bearer => "bearer",
+            .basic => "basic",
+            .oauth2 => "oauth2",
+            .aws_v4 => "awsv4",
+            .digest => "digest",
+            .api_key => "apikey",
+        };
+        try writer.print("  auth: {s}\n", .{auth_mode});
+    }
     try writer.writeAll("}\n");
 
     // headers
@@ -157,6 +184,7 @@ pub fn emit(allocator: std.mem.Allocator, req: oc.OpenCollectionRequest) ![]cons
                 try writer.print("  value: {s}\n", .{a.value});
                 try writer.writeAll("}\n");
             },
+            .inherit => {},
             .none => {},
         }
     }
@@ -225,6 +253,21 @@ pub fn emit(allocator: std.mem.Allocator, req: oc.OpenCollectionRequest) ![]cons
                 try writer.writeAll("}\n");
             }
         }
+    }
+
+    // settings
+    if (req.settings) |settings| {
+        try writer.writeAll("\nsettings {\n");
+        if (settings.encode_url) |v| {
+            try writer.print("  encodeUrl: {s}\n", .{if (v) "true" else "false"});
+        }
+        if (settings.timeout) |t| {
+            try writer.print("  timeout: {d}\n", .{t});
+        }
+        if (settings.follow_redirects) |v| {
+            try writer.print("  followRedirects: {s}\n", .{if (v) "true" else "false"});
+        }
+        try writer.writeAll("}\n");
     }
 
     // docs

@@ -82,6 +82,7 @@ const YamlParser = struct {
         var info: ?oc.Info = null;
         var http: ?oc.Http = null;
         var runtime: ?oc.Runtime = null;
+        var settings: ?oc.Settings = null;
         var docs: ?oc.Docs = null;
 
         while (self.peek()) |line| {
@@ -102,6 +103,9 @@ const YamlParser = struct {
             } else if (std.mem.eql(u8, kv.key, "runtime")) {
                 _ = self.advance();
                 runtime = try self.parseRuntime();
+            } else if (std.mem.eql(u8, kv.key, "settings")) {
+                _ = self.advance();
+                settings = try self.parseSettings();
             } else if (std.mem.eql(u8, kv.key, "docs")) {
                 _ = self.advance();
                 docs = try self.parseDocs();
@@ -117,6 +121,7 @@ const YamlParser = struct {
             .info = info.?,
             .http = http.?,
             .runtime = runtime,
+            .settings = settings,
             .docs = docs,
         };
     }
@@ -347,7 +352,32 @@ const YamlParser = struct {
         if (std.mem.eql(u8, at, "digest")) {
             return oc.Auth{ .digest = .{ .username = username orelse "", .password = password orelse "" } };
         }
+        if (std.mem.eql(u8, at, "inherit")) {
+            return oc.Auth{ .inherit = {} };
+        }
         return oc.Auth{ .none = {} };
+    }
+
+    fn parseSettings(self: *YamlParser) YamlParseError!oc.Settings {
+        var settings = oc.Settings{};
+
+        while (self.peek()) |line| {
+            if (line.indent < 2) break;
+            const kv = parseKeyValue(line.content) orelse {
+                _ = self.advance();
+                continue;
+            };
+            _ = self.advance();
+            if (std.mem.eql(u8, kv.key, "encodeUrl")) {
+                settings.encode_url = std.mem.eql(u8, unquote(kv.value), "true");
+            } else if (std.mem.eql(u8, kv.key, "timeout")) {
+                settings.timeout = std.fmt.parseInt(usize, unquote(kv.value), 10) catch null;
+            } else if (std.mem.eql(u8, kv.key, "followRedirects")) {
+                settings.follow_redirects = std.mem.eql(u8, unquote(kv.value), "true");
+            }
+        }
+
+        return settings;
     }
 
     fn parseRuntime(self: *YamlParser) YamlParseError!oc.Runtime {
